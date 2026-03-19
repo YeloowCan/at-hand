@@ -5,8 +5,8 @@
 | 步骤 | 状态 | 完成日期 | 备注 |
 |------|------|----------|------|
 | 步骤1：创建Expo项目 | ✅ 已完成 | 2026-03-19 | 使用create-expo-app初始化，启用TypeScript模板 |
-| 步骤2：安装基础依赖 | 🔄 进行中 | - | - |
-| 步骤3：配置NativeWind | ⏳ 待开始 | - | - |
+| 步骤2：安装基础依赖 | ✅ 已完成 | 2026-03-19 | 已安装 nativewind, zustand, expo-sqlite, expo-crypto, tailwindcss |
+| 步骤3：配置NativeWind | ✅ 已完成 | 2026-03-19 | 已配置tailwind.config.js, babel.config.js, metro.config.js, global.css |
 
 ## 阶段二：基础结构搭建
 
