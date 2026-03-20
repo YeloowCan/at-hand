@@ -4,6 +4,7 @@ import {
   createInfo,
   deleteInfo,
   listInfos,
+  setInfoCategory,
   touchInfo,
   updateInfo,
 } from "../services/infoService";
@@ -17,6 +18,7 @@ type State = {
   update: (id: string, draft: InfoDraft) => Promise<void>;
   remove: (id: string) => Promise<void>;
   touchUsed: (id: string) => Promise<void>;
+  replaceCategory: (from: string, to: string) => Promise<void>;
 };
 
 export const useInfoStore = create<State>((set, get) => ({
@@ -66,5 +68,13 @@ export const useInfoStore = create<State>((set, get) => ({
     });
     await touchInfo(id);
   },
-}));
 
+  replaceCategory: async (from, to) => {
+    set({ error: null });
+    const ids = get()
+      .items.filter((it) => it.category === from)
+      .map((it) => it.id);
+    await Promise.all(ids.map((id) => setInfoCategory(id, to)));
+    await get().load();
+  },
+}));

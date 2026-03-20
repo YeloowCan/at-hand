@@ -17,7 +17,6 @@ export type InfoItem = {
   title: string;
   content: string;
   category: string;
-  tags: string[];
   attachments: InfoAttachment[];
   createdAt: number;
   updatedAt: number;
@@ -29,7 +28,5 @@ export type InfoDraft = {
   title: string;
   content: string;
   category: string;
-  tags: string[];
   attachments: InfoAttachment[];
 };
-

@@ -7,11 +7,15 @@ import {
   softDeleteInfo,
   upsertInfoRow,
 } from "../db/infoRepo";
+import {
+  SECURITY_SECURE_STORE_KEYS,
+  useSecurityStore,
+} from "../store/useSecurityStore";
 import type { InfoDraft, InfoItem } from "../types/info";
 import { decryptJsonV1, encryptJsonV1, randomHex } from "../utils/crypto";
-import { useSecurityStore } from "../store/useSecurityStore";
+import { DEFAULT_CATEGORIES } from "./categoryService";
 
-const KEY_SALT = "at-hand:salt";
+const LEGACY_KEY_SALT = "at-hand:salt";
 
 function requireKeyHex() {
   const keyHex = useSecurityStore.getState().keyHex;
@@ -22,7 +26,9 @@ function requireKeyHex() {
 }
 
 async function requireSaltHex() {
-  const salt = await SecureStore.getItemAsync(KEY_SALT);
+  const salt =
+    (await SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.SALT)) ??
+    (await SecureStore.getItemAsync(LEGACY_KEY_SALT));
   if (!salt) throw new Error("PIN not set");
   return salt;
 }
@@ -31,17 +37,24 @@ type InfoPayloadV1 = {
   title: string;
   content: string;
   category: string;
-  tags: string[];
   attachments: InfoDraft["attachments"];
 };
 
-function toItem(id: string, meta: { createdAt: number; updatedAt: number; lastUsedAt: number | null; deletedAt: number | null }, payload: InfoPayloadV1): InfoItem {
+function toItem(
+  id: string,
+  meta: {
+    createdAt: number;
+    updatedAt: number;
+    lastUsedAt: number | null;
+    deletedAt: number | null;
+  },
+  payload: InfoPayloadV1,
+): InfoItem {
   return {
     id,
     title: payload.title,
     content: payload.content,
     category: payload.category,
-    tags: payload.tags,
     attachments: payload.attachments,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,
@@ -100,8 +113,7 @@ export async function createInfo(draft: InfoDraft) {
   const payload: InfoPayloadV1 = {
     title: draft.title.trim(),
     content: draft.content,
-    category: draft.category.trim() || "未分类",
-    tags: draft.tags,
+    category: draft.category.trim() || DEFAULT_CATEGORIES[0],
     attachments: draft.attachments,
   };
   const ciphertext = await encryptJsonV1(payload, keyHex, saltHex);
@@ -119,11 +131,36 @@ export async function updateInfo(id: string, draft: InfoDraft) {
   const payload: InfoPayloadV1 = {
     title: draft.title.trim(),
     content: draft.content,
-    category: draft.category.trim() || "未分类",
-    tags: draft.tags,
+    category: draft.category.trim() || DEFAULT_CATEGORIES[0],
     attachments: draft.attachments,
   };
   const ciphertext = await encryptJsonV1(payload, keyHex, saltHex);
+  await upsertInfoRow(db, { id, ciphertext, created_at: now, updated_at: now });
+}
+
+export async function setInfoCategory(id: string, category: string) {
+  await initDbOnce();
+  const db = getDb();
+  const keyHex = requireKeyHex();
+  const saltHex = await requireSaltHex();
+  const now = Date.now();
+
+  const row = await getInfoRowById(db, id);
+  if (!row || row.deleted_at) return;
+
+  const payload = decryptJsonV1<InfoPayloadV1 & { tags?: unknown }>(
+    row.ciphertext,
+    keyHex,
+  );
+
+  const nextPayload: InfoPayloadV1 = {
+    title: payload.title,
+    content: payload.content,
+    category: category.trim() || payload.category || DEFAULT_CATEGORIES[0],
+    attachments: payload.attachments ?? [],
+  };
+
+  const ciphertext = await encryptJsonV1(nextPayload, keyHex, saltHex);
   await upsertInfoRow(db, { id, ciphertext, created_at: now, updated_at: now });
 }
 
@@ -140,4 +177,3 @@ export async function deleteInfo(id: string) {
   const now = Date.now();
   await softDeleteInfo(db, id, now);
 }
-

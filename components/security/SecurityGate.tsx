@@ -1,8 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { AppState, Pressable, Text, TextInput, View } from "react-native";
+import {
+  AppState,
+  Keyboard,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useSecurityStore } from "../../store/useSecurityStore";
 
 type Props = { children: React.ReactNode };
+
+function nextFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
 
 function PrimaryButton(props: {
   label: string;
@@ -48,79 +61,87 @@ function SetupPinScreen() {
   }, [pin, confirm]);
 
   return (
-    <View className="flex-1 bg-white px-6 pt-12">
-      <Text className="text-3xl font-light tracking-tight">设置 PIN</Text>
-      <Text className="text-sm text-gray-400 mt-2">
-        PIN 用于本地加密与解锁，忘记后无法恢复数据
-      </Text>
+    <Pressable
+      className="flex-1 bg-white"
+      onPress={() => Keyboard.dismiss()}
+      accessible={false}
+    >
+      <View className="flex-1 px-6 pt-12">
+        <Text className="text-3xl font-light tracking-tight">设置 PIN</Text>
+        <Text className="text-sm text-gray-400 mt-2">
+          PIN 用于本地加密与解锁，忘记后无法恢复数据
+        </Text>
 
-      <View className="mt-10">
-        <Text className="text-sm text-gray-400 mb-2">PIN（至少 4 位）</Text>
-        <View className="rounded-2xl bg-gray-100 px-4 py-3">
-          <TextInput
-            value={pin}
-            onChangeText={(t) => {
-              setPin(t.replace(/\D/g, ""));
-              setError(null);
-            }}
-            keyboardType="number-pad"
-            secureTextEntry
-            className="text-base text-gray-900"
-            placeholder="输入 PIN"
-            placeholderTextColor="#9CA3AF"
-          />
+        <View className="mt-10">
+          <Text className="text-sm text-gray-400 mb-2">PIN（至少 4 位）</Text>
+          <View className="rounded-2xl bg-gray-100 px-4 py-3">
+            <TextInput
+              value={pin}
+              onChangeText={(t) => {
+                setPin(t.replace(/\D/g, ""));
+                setError(null);
+              }}
+              keyboardType="number-pad"
+              secureTextEntry
+              className="text-base text-gray-900"
+              placeholder="输入 PIN"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          <Text className="text-sm text-gray-400 mb-2 mt-5">确认 PIN</Text>
+          <View className="rounded-2xl bg-gray-100 px-4 py-3">
+            <TextInput
+              value={confirm}
+              onChangeText={(t) => {
+                setConfirm(t.replace(/\D/g, ""));
+                setError(null);
+              }}
+              keyboardType="number-pad"
+              secureTextEntry
+              className="text-base text-gray-900"
+              placeholder="再次输入 PIN"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          {biometricAvailable ? (
+            <Pressable
+              onPress={() => setEnableBio((v) => !v)}
+              className="mt-6 rounded-2xl border border-gray-100 px-4 py-4"
+            >
+              <Text className="text-base text-gray-900">启用生物识别</Text>
+              <Text className="text-sm text-gray-400 mt-1">
+                {enableBio ? "已启用" : "未启用"}
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {error ? (
+            <Text className="text-sm text-red-500 mt-4">{error}</Text>
+          ) : null}
         </View>
 
-        <Text className="text-sm text-gray-400 mb-2 mt-5">确认 PIN</Text>
-        <View className="rounded-2xl bg-gray-100 px-4 py-3">
-          <TextInput
-            value={confirm}
-            onChangeText={(t) => {
-              setConfirm(t.replace(/\D/g, ""));
-              setError(null);
+        <View className="mt-auto pb-8">
+          <PrimaryButton
+            label={saving ? "保存中…" : "完成"}
+            disabled={!canSubmit || saving}
+            onPress={async () => {
+              Keyboard.dismiss();
+              try {
+                setSaving(true);
+                await nextFrame();
+                await setupPin(pin, enableBio);
+              } catch {
+                setError("保存失败，请重试");
+              } finally {
+                setSaving(false);
+              }
             }}
-            keyboardType="number-pad"
-            secureTextEntry
-            className="text-base text-gray-900"
-            placeholder="再次输入 PIN"
-            placeholderTextColor="#9CA3AF"
           />
         </View>
-
-        {biometricAvailable ? (
-          <Pressable
-            onPress={() => setEnableBio((v) => !v)}
-            className="mt-6 rounded-2xl border border-gray-100 px-4 py-4"
-          >
-            <Text className="text-base text-gray-900">启用生物识别</Text>
-            <Text className="text-sm text-gray-400 mt-1">
-              {enableBio ? "已启用" : "未启用"}
-            </Text>
-          </Pressable>
-        ) : null}
-
-        {error ? (
-          <Text className="text-sm text-red-500 mt-4">{error}</Text>
-        ) : null}
       </View>
-
-      <View className="mt-auto pb-8">
-        <PrimaryButton
-          label={saving ? "保存中…" : "完成"}
-          disabled={!canSubmit || saving}
-          onPress={async () => {
-            try {
-              setSaving(true);
-              await setupPin(pin, enableBio);
-            } catch {
-              setError("保存失败，请重试");
-            } finally {
-              setSaving(false);
-            }
-          }}
-        />
-      </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -134,64 +155,74 @@ function UnlockScreen() {
   const [unlocking, setUnlocking] = useState(false);
 
   return (
-    <View className="flex-1 bg-white px-6 pt-12">
-      <Text className="text-3xl font-light tracking-tight">解锁随取</Text>
-      <Text className="text-sm text-gray-400 mt-2">输入 PIN 进入应用</Text>
+    <Pressable
+      className="flex-1 bg-white"
+      onPress={() => Keyboard.dismiss()}
+      accessible={false}
+    >
+      <View className="flex-1 px-6 pt-12">
+        <Text className="text-3xl font-light tracking-tight">解锁随取</Text>
+        <Text className="text-sm text-gray-400 mt-2">输入 PIN 进入应用</Text>
 
-      <View className="mt-10">
-        <Text className="text-sm text-gray-400 mb-2">PIN</Text>
-        <View className="rounded-2xl bg-gray-100 px-4 py-3">
-          <TextInput
-            value={pin}
-            onChangeText={(t) => {
-              setPin(t.replace(/\D/g, ""));
-              setError(null);
-            }}
-            keyboardType="number-pad"
-            secureTextEntry
-            className="text-base text-gray-900"
-            placeholder="输入 PIN"
-            placeholderTextColor="#9CA3AF"
-          />
+        <View className="mt-10">
+          <Text className="text-sm text-gray-400 mb-2">PIN</Text>
+          <View className="rounded-2xl bg-gray-100 px-4 py-3">
+            <TextInput
+              value={pin}
+              onChangeText={(t) => {
+                setPin(t.replace(/\D/g, ""));
+                setError(null);
+              }}
+              keyboardType="number-pad"
+              secureTextEntry
+              className="text-base text-gray-900"
+              placeholder="输入 PIN"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          {error ? (
+            <Text className="text-sm text-red-500 mt-4">{error}</Text>
+          ) : null}
         </View>
 
-        {error ? (
-          <Text className="text-sm text-red-500 mt-4">{error}</Text>
-        ) : null}
-      </View>
-
-      <View className="mt-auto pb-8">
-        <PrimaryButton
-          label={unlocking ? "解锁中…" : "解锁"}
-          disabled={!pin || unlocking}
-          onPress={async () => {
-            try {
-              setUnlocking(true);
-              await unlockWithPin(pin);
-            } catch {
-              setError("PIN 不正确");
-            } finally {
-              setUnlocking(false);
-            }
-          }}
-        />
-        {biometricEnabled ? (
-          <SecondaryButton
-            label="使用生物识别解锁"
+        <View className="mt-auto pb-8">
+          <PrimaryButton
+            label={unlocking ? "解锁中…" : "解锁"}
+            disabled={!pin || unlocking}
             onPress={async () => {
+              Keyboard.dismiss();
               try {
                 setUnlocking(true);
-                await unlockWithBiometric();
+                await nextFrame();
+                await unlockWithPin(pin);
               } catch {
-                setError("生物识别解锁失败");
+                setError("PIN 不正确");
               } finally {
                 setUnlocking(false);
               }
             }}
           />
-        ) : null}
+          {biometricEnabled ? (
+            <SecondaryButton
+              label="使用生物识别解锁"
+              onPress={async () => {
+                Keyboard.dismiss();
+                try {
+                  setUnlocking(true);
+                  await nextFrame();
+                  await unlockWithBiometric();
+                } catch {
+                  setError("生物识别解锁失败");
+                } finally {
+                  setUnlocking(false);
+                }
+              }}
+            />
+          ) : null}
+        </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

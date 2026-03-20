@@ -5,15 +5,19 @@ import { deriveKeyHex, randomHex, sha256Hex } from "../utils/crypto";
 
 type SecurityStatus = "booting" | "setup_required" | "locked" | "unlocked";
 
-const KEY_SALT = "at-hand-salt";
-const KEY_VERIFIER = "at-hand-verifier";
-const KEY_BIO_ENABLED = "at-hand-bio-enabled";
-const KEY_BIO_PIN = "at-hand-bio-pin";
+export const SECURITY_SECURE_STORE_KEYS = {
+  SALT: "at-hand-salt",
+  VERIFIER: "at-hand-verifier",
+  BIO_ENABLED: "at-hand-bio-enabled",
+  BIO_PIN: "at-hand-bio-pin",
+} as const;
 
 type State = {
   status: SecurityStatus;
   biometricAvailable: boolean;
   biometricEnabled: boolean;
+  saltHex: string | null;
+  verifier: string | null;
   keyHex: string | null;
   bootstrap: () => Promise<void>;
   setupPin: (pin: string, enableBiometric: boolean) => Promise<void>;
@@ -32,9 +36,9 @@ async function detectBiometricAvailable() {
 
 async function getMeta() {
   const [salt, verifier, bioEnabled] = await Promise.all([
-    SecureStore.getItemAsync(KEY_SALT),
-    SecureStore.getItemAsync(KEY_VERIFIER),
-    SecureStore.getItemAsync(KEY_BIO_ENABLED),
+    SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.SALT),
+    SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.VERIFIER),
+    SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.BIO_ENABLED),
   ]);
   return {
     salt,
@@ -47,6 +51,8 @@ export const useSecurityStore = create<State>((set, get) => ({
   status: "booting",
   biometricAvailable: false,
   biometricEnabled: false,
+  saltHex: null,
+  verifier: null,
   keyHex: null,
 
   bootstrap: async () => {
@@ -55,13 +61,13 @@ export const useSecurityStore = create<State>((set, get) => ({
       getMeta(),
     ]);
 
-    console.log("bootstrap", biometricAvailable, meta);
-
     if (!meta.salt || !meta.verifier) {
       set({
         status: "setup_required",
         biometricAvailable,
         biometricEnabled: false,
+        saltHex: null,
+        verifier: null,
         keyHex: null,
       });
       return;
@@ -71,6 +77,8 @@ export const useSecurityStore = create<State>((set, get) => ({
       status: "locked",
       biometricAvailable,
       biometricEnabled: meta.bioEnabled && biometricAvailable,
+      saltHex: meta.salt,
+      verifier: meta.verifier,
       keyHex: null,
     });
   },
@@ -81,14 +89,18 @@ export const useSecurityStore = create<State>((set, get) => ({
     const keyHex = deriveKeyHex(pin, saltHex);
     const verifier = sha256Hex(keyHex);
 
-    await SecureStore.setItemAsync(KEY_SALT, saltHex);
-    await SecureStore.setItemAsync(KEY_VERIFIER, verifier);
-
     const willEnableBio = Boolean(enableBiometric && biometricAvailable);
-    await SecureStore.setItemAsync(KEY_BIO_ENABLED, willEnableBio ? "1" : "0");
+    await Promise.all([
+      SecureStore.setItemAsync(SECURITY_SECURE_STORE_KEYS.SALT, saltHex),
+      SecureStore.setItemAsync(SECURITY_SECURE_STORE_KEYS.VERIFIER, verifier),
+      SecureStore.setItemAsync(
+        SECURITY_SECURE_STORE_KEYS.BIO_ENABLED,
+        willEnableBio ? "1" : "0",
+      ),
+    ]);
 
     if (willEnableBio) {
-      await SecureStore.setItemAsync(KEY_BIO_PIN, pin, {
+      await SecureStore.setItemAsync(SECURITY_SECURE_STORE_KEYS.BIO_PIN, pin, {
         requireAuthentication: true,
         authenticationPrompt: "使用生物识别解锁随取",
       });
@@ -97,19 +109,34 @@ export const useSecurityStore = create<State>((set, get) => ({
     set({
       status: "unlocked",
       biometricEnabled: willEnableBio,
+      saltHex,
+      verifier,
       keyHex,
     });
   },
 
   unlockWithPin: async (pin) => {
-    const meta = await getMeta();
-    if (!meta.salt || !meta.verifier) {
+    let saltHex = get().saltHex;
+    let verifierHex = get().verifier;
+
+    if (!saltHex || !verifierHex) {
+      const meta = await getMeta();
+      saltHex = meta.salt;
+      verifierHex = meta.verifier;
+      set({
+        biometricEnabled: meta.bioEnabled && get().biometricAvailable,
+        saltHex: meta.salt ?? null,
+        verifier: meta.verifier ?? null,
+      });
+    }
+
+    if (!saltHex || !verifierHex) {
       set({ status: "setup_required", keyHex: null, biometricEnabled: false });
       return;
     }
-    const keyHex = deriveKeyHex(pin, meta.salt);
+    const keyHex = deriveKeyHex(pin, saltHex);
     const verifier = sha256Hex(keyHex);
-    if (verifier !== meta.verifier) {
+    if (verifier !== verifierHex) {
       throw new Error("PIN incorrect");
     }
     set({ status: "unlocked", keyHex });
@@ -120,10 +147,13 @@ export const useSecurityStore = create<State>((set, get) => ({
     if (!biometricEnabled || !biometricAvailable) {
       throw new Error("Biometric unavailable");
     }
-    const pin = await SecureStore.getItemAsync(KEY_BIO_PIN, {
-      requireAuthentication: true,
-      authenticationPrompt: "使用生物识别解锁随取",
-    });
+    const pin = await SecureStore.getItemAsync(
+      SECURITY_SECURE_STORE_KEYS.BIO_PIN,
+      {
+        requireAuthentication: true,
+        authenticationPrompt: "使用生物识别解锁随取",
+      },
+    );
     if (!pin) {
       throw new Error("Biometric PIN missing");
     }
@@ -139,16 +169,17 @@ export const useSecurityStore = create<State>((set, get) => ({
     if (!biometricAvailable) {
       throw new Error("Biometric unavailable");
     }
-    const meta = await getMeta();
-    if (!meta.salt || !meta.verifier) {
+    const saltHex = get().saltHex;
+    const verifierHex = get().verifier;
+    if (!saltHex || !verifierHex) {
       throw new Error("PIN not set");
     }
-    const keyHex = deriveKeyHex(pin, meta.salt);
-    if (sha256Hex(keyHex) !== meta.verifier) {
+    const keyHex = deriveKeyHex(pin, saltHex);
+    if (sha256Hex(keyHex) !== verifierHex) {
       throw new Error("PIN incorrect");
     }
-    await SecureStore.setItemAsync(KEY_BIO_ENABLED, "1");
-    await SecureStore.setItemAsync(KEY_BIO_PIN, pin, {
+    await SecureStore.setItemAsync(SECURITY_SECURE_STORE_KEYS.BIO_ENABLED, "1");
+    await SecureStore.setItemAsync(SECURITY_SECURE_STORE_KEYS.BIO_PIN, pin, {
       requireAuthentication: true,
       authenticationPrompt: "使用生物识别解锁随取",
     });
@@ -157,8 +188,8 @@ export const useSecurityStore = create<State>((set, get) => ({
 
   disableBiometric: async () => {
     await Promise.all([
-      SecureStore.setItemAsync(KEY_BIO_ENABLED, "0"),
-      SecureStore.deleteItemAsync(KEY_BIO_PIN),
+      SecureStore.setItemAsync(SECURITY_SECURE_STORE_KEYS.BIO_ENABLED, "0"),
+      SecureStore.deleteItemAsync(SECURITY_SECURE_STORE_KEYS.BIO_PIN),
     ]);
     set({ biometricEnabled: false });
   },

@@ -26,7 +26,7 @@ export default function HomeScreen() {
       if (category && it.category !== category) return false;
       if (!q) return true;
       const hay =
-        `${it.title} ${it.content} ${it.category} ${it.tags.join(" ")}`.toLowerCase();
+        `${it.title} ${it.content} ${it.category}`.toLowerCase();
       return hay.includes(q);
     });
   }, [items, query, category]);

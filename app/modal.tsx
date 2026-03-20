@@ -1,12 +1,13 @@
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Keyboard, Pressable, Text, TextInput, View } from "react-native";
 import {
   deleteAttachment,
   pickAndSaveImage,
 } from "../services/attachmentService";
 import { getInfoById } from "../services/infoService";
+import { useCategoryStore } from "../store/useCategoryStore";
 import { useInfoStore } from "../store/useInfoStore";
 import type { InfoAttachment, InfoDraft } from "../types/info";
 
@@ -17,10 +18,14 @@ export default function ModalScreen() {
   const update = useInfoStore((s) => s.update);
   const remove = useInfoStore((s) => s.remove);
 
+  const categories = useCategoryStore((s) => s.categories);
+  const bootstrapCategories = useCategoryStore((s) => s.bootstrap);
+  const addCategory = useCategoryStore((s) => s.addCategory);
+
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("");
-  const [tagsText, setTagsText] = useState("");
+  const [categoryOpen, setCategoryOpen] = useState(false);
   const [attachments, setAttachments] = useState<InfoAttachment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,10 +33,17 @@ export default function ModalScreen() {
   const editingId = typeof params.id === "string" ? params.id : null;
 
   useEffect(() => {
+    bootstrapCategories().catch(() => undefined);
+  }, [bootstrapCategories]);
+
+  useEffect(() => {
     const presetCategory =
       typeof params.category === "string" ? params.category : "";
-    if (presetCategory) setCategory(presetCategory);
-  }, [params.category]);
+    if (presetCategory) {
+      setCategory(presetCategory);
+      addCategory(presetCategory).catch(() => undefined);
+    }
+  }, [params.category, addCategory]);
 
   useEffect(() => {
     if (!editingId) return;
@@ -42,31 +54,40 @@ export default function ModalScreen() {
         setTitle(it.title);
         setContent(it.content);
         setCategory(it.category);
-        setTagsText(it.tags.join(","));
+        addCategory(it.category).catch(() => undefined);
         setAttachments(it.attachments);
       })
       .catch(() => setError("加载失败"))
       .finally(() => setLoading(false));
-  }, [editingId]);
+  }, [editingId, addCategory]);
+
+  useEffect(() => {
+    if (editingId) return;
+    if (category.trim()) return;
+    if (!categories.length) return;
+    setCategory(categories[0]);
+  }, [categories, category, editingId]);
 
   const draft = useMemo<InfoDraft>(() => {
-    const tags = tagsText
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
     return {
       title,
       content,
       category,
-      tags,
       attachments,
     };
-  }, [title, content, category, tagsText, attachments]);
+  }, [title, content, category, attachments]);
 
   const canSave = Boolean(draft.title.trim());
 
   return (
-    <View className="bg-white flex-1">
+    <Pressable
+      className="bg-white flex-1"
+      onPress={() => {
+        Keyboard.dismiss();
+        setCategoryOpen(false);
+      }}
+      accessible={false}
+    >
       <View className="px-6 pt-6">
         <Text className="text-2xl font-light tracking-tight">
           {editingId ? "编辑信息" : "新建信息"}
@@ -105,38 +126,40 @@ export default function ModalScreen() {
 
         <Text className="text-sm text-gray-400 mb-2 mt-5">分类</Text>
         <View className="rounded-2xl bg-gray-100 px-4 py-3">
-          <TextInput
-            value={category}
-            onChangeText={(t) => {
-              setCategory(t);
-              setError(null);
+          <Pressable
+            onPress={() => {
+              Keyboard.dismiss();
+              setCategoryOpen((v) => !v);
             }}
-            placeholder="例如：证件"
-            placeholderTextColor="#9CA3AF"
-            className="text-base text-gray-900"
-          />
+          >
+            <Text className="text-base text-gray-900">
+              {category.trim() || "请选择分类"}
+            </Text>
+          </Pressable>
         </View>
-
-        <Text className="text-sm text-gray-400 mb-2 mt-5">
-          标签（逗号分隔）
-        </Text>
-        <View className="rounded-2xl bg-gray-100 px-4 py-3">
-          <TextInput
-            value={tagsText}
-            onChangeText={(t) => {
-              setTagsText(t);
-              setError(null);
-            }}
-            placeholder="例如：常用,重要"
-            placeholderTextColor="#9CA3AF"
-            className="text-base text-gray-900"
-          />
-        </View>
+        {categoryOpen ? (
+          <View className="mt-3 rounded-2xl border border-gray-100 overflow-hidden">
+            {categories.map((name) => (
+              <Pressable
+                key={name}
+                onPress={() => {
+                  setCategory(name);
+                  setCategoryOpen(false);
+                  setError(null);
+                }}
+                className="px-4 py-3 bg-white"
+              >
+                <Text className="text-base text-gray-900">{name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         <View className="mt-5">
           <Pressable
             onPress={async () => {
               try {
+                Keyboard.dismiss();
                 setLoading(true);
                 const att = await pickAndSaveImage();
                 if (att) setAttachments((prev) => [...prev, att]);
@@ -191,6 +214,7 @@ export default function ModalScreen() {
           <Pressable
             onPress={async () => {
               try {
+                Keyboard.dismiss();
                 setLoading(true);
                 await remove(editingId);
                 await load();
@@ -211,6 +235,7 @@ export default function ModalScreen() {
           disabled={!canSave || loading}
           onPress={async () => {
             try {
+              Keyboard.dismiss();
               setLoading(true);
               if (editingId) {
                 await update(editingId, draft);
@@ -235,6 +260,6 @@ export default function ModalScreen() {
           </Text>
         </Pressable>
       </View>
-    </View>
+    </Pressable>
   );
 }
