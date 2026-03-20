@@ -1,6 +1,18 @@
 import * as ExpoCrypto from "expo-crypto";
 import CryptoJS from "crypto-js";
 
+export type KdfParams = {
+  algorithm: "pbkdf2-sha256";
+  iterations: number;
+  keySizeBits: 256;
+};
+
+export const CURRENT_KDF_PARAMS: KdfParams = {
+  algorithm: "pbkdf2-sha256",
+  iterations: 30_000,
+  keySizeBits: 256,
+};
+
 function bytesToHex(bytes: Uint8Array) {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -12,11 +24,15 @@ export async function randomHex(byteLength: number) {
   return bytesToHex(bytes);
 }
 
-export function deriveKeyHex(pin: string, saltHex: string) {
+export function deriveKeyHex(
+  pin: string,
+  saltHex: string,
+  params: KdfParams = CURRENT_KDF_PARAMS,
+) {
   const salt = CryptoJS.enc.Hex.parse(saltHex);
   const key = CryptoJS.PBKDF2(pin, salt, {
-    keySize: 256 / 32,
-    iterations: 120_000,
+    keySize: params.keySizeBits / 32,
+    iterations: params.iterations,
     hasher: CryptoJS.algo.SHA256,
   });
   return key.toString(CryptoJS.enc.Hex);

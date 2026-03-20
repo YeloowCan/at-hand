@@ -18,6 +18,13 @@ export async function listInfoRows(db: SQLiteDatabase) {
   );
 }
 
+export async function listAllInfoRows(db: SQLiteDatabase) {
+  return db.getAllAsync<InfoRow>(
+    `SELECT id, ciphertext, created_at, updated_at, last_used_at, deleted_at
+     FROM info`,
+  );
+}
+
 export async function getInfoRowById(db: SQLiteDatabase, id: string) {
   const rows = await db.getAllAsync<InfoRow>(
     `SELECT id, ciphertext, created_at, updated_at, last_used_at, deleted_at
@@ -43,6 +50,16 @@ export async function upsertInfoRow(
   );
 }
 
+export async function updateInfoCiphertext(
+  db: SQLiteDatabase,
+  row: Pick<InfoRow, "id" | "ciphertext" | "updated_at">,
+) {
+  await db.runAsync(
+    `UPDATE info SET ciphertext = ?, updated_at = ? WHERE id = ?`,
+    [row.ciphertext, row.updated_at, row.id],
+  );
+}
+
 export async function markInfoUsed(db: SQLiteDatabase, id: string, at: number) {
   await db.runAsync(
     `UPDATE info SET last_used_at = ?, updated_at = ? WHERE id = ?`,
@@ -57,4 +74,3 @@ export async function softDeleteInfo(db: SQLiteDatabase, id: string, at: number)
     id,
   ]);
 }
-

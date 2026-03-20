@@ -9,31 +9,33 @@ export default function SettingsScreen() {
   const biometricEnabled = useSecurityStore((s) => s.biometricEnabled);
   const enableBiometric = useSecurityStore((s) => s.enableBiometric);
   const disableBiometric = useSecurityStore((s) => s.disableBiometric);
+  const clearAllData = useSecurityStore((s) => s.clearAllData);
 
   const [showEnableBio, setShowEnableBio] = useState(false);
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
   const canEnable = useMemo(() => pin.length >= 4, [pin]);
 
   return (
-    <View className="bg-white flex-1">
-      <View className="px-6 pt-10 pb-4">
+    <View className="flex-1 bg-white">
+      <View className="px-6 pb-4 pt-10">
         <Text className="text-3xl font-light tracking-tight">设置</Text>
-        <Text className="text-sm text-gray-400 mt-1">安全与偏好</Text>
+        <Text className="mt-1 text-sm text-gray-400">安全与偏好</Text>
       </View>
 
       <View className="px-6">
         <View className="rounded-2xl border border-gray-100 px-4 py-4">
           <Text className="text-base text-gray-900">解锁</Text>
-          <Text className="text-sm text-gray-400 mt-1">
+          <Text className="mt-1 text-sm text-gray-400">
             设置 PIN 或启用生物识别
           </Text>
         </View>
 
         {biometricAvailable ? (
-          <View className="rounded-2xl border border-gray-100 px-4 py-4 mt-3">
+          <View className="mt-3 rounded-2xl border border-gray-100 px-4 py-4">
             <Text className="text-base text-gray-900">生物识别解锁</Text>
-            <Text className="text-sm text-gray-400 mt-1">
+            <Text className="mt-1 text-sm text-gray-400">
               {biometricEnabled ? "已启用" : "未启用"}
             </Text>
             {biometricEnabled ? (
@@ -46,7 +48,7 @@ export default function SettingsScreen() {
                 }}
                 className="mt-4 rounded-2xl bg-gray-100 px-4 py-3"
               >
-                <Text className="text-gray-900 text-center">关闭</Text>
+                <Text className="text-center text-gray-900">关闭</Text>
               </Pressable>
             ) : (
               <>
@@ -57,11 +59,11 @@ export default function SettingsScreen() {
                   }}
                   className="mt-4 rounded-2xl bg-gray-100 px-4 py-3"
                 >
-                  <Text className="text-gray-900 text-center">启用</Text>
+                  <Text className="text-center text-gray-900">启用</Text>
                 </Pressable>
                 {showEnableBio ? (
                   <View className="mt-4">
-                    <Text className="text-sm text-gray-400 mb-2">输入 PIN</Text>
+                    <Text className="mb-2 text-sm text-gray-400">输入 PIN</Text>
                     <View className="rounded-2xl bg-gray-100 px-4 py-3">
                       <TextInput
                         value={pin}
@@ -77,7 +79,7 @@ export default function SettingsScreen() {
                       />
                     </View>
                     {error ? (
-                      <Text className="text-sm text-red-500 mt-3">{error}</Text>
+                      <Text className="mt-3 text-sm text-red-500">{error}</Text>
                     ) : null}
                     <Pressable
                       onPress={async () => {
@@ -95,7 +97,7 @@ export default function SettingsScreen() {
                         canEnable ? "bg-gray-900" : "bg-gray-300",
                       ].join(" ")}
                     >
-                      <Text className="text-white text-center">确认启用</Text>
+                      <Text className="text-center text-white">确认启用</Text>
                     </Pressable>
                   </View>
                 ) : null}
@@ -107,12 +109,42 @@ export default function SettingsScreen() {
         {status === "unlocked" ? (
           <Pressable
             onPress={lock}
-            className="rounded-2xl border border-gray-100 px-4 py-4 mt-3"
+            className="mt-3 rounded-2xl border border-gray-100 px-4 py-4"
           >
             <Text className="text-base text-gray-900">立即锁定</Text>
-            <Text className="text-sm text-gray-400 mt-1">返回到解锁界面</Text>
+            <Text className="mt-1 text-sm text-gray-400">返回到解锁界面</Text>
           </Pressable>
         ) : null}
+
+        <View className="mt-3 rounded-2xl border border-red-100 px-4 py-4">
+          <Text className="text-base text-red-600">清空本地数据</Text>
+          <Text className="mt-1 text-sm text-gray-400">
+            删除本机 PIN、加密信息和已保存内容
+          </Text>
+          <Pressable
+            onPress={async () => {
+              try {
+                setClearing(true);
+                setError(null);
+                await clearAllData();
+              } catch {
+                setError("清空失败，请重试");
+              } finally {
+                setClearing(false);
+              }
+            }}
+            className={[
+              "mt-4 rounded-2xl px-4 py-3",
+              clearing ? "bg-red-200" : "bg-red-500",
+            ].join(" ")}
+          >
+            <Text className="text-center text-white">
+              {clearing ? "清空中…" : "确认清空"}
+            </Text>
+          </Pressable>
+        </View>
+
+        {error ? <Text className="mt-4 text-sm text-red-500">{error}</Text> : null}
       </View>
     </View>
   );
