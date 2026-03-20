@@ -14,7 +14,6 @@ export default function RootLayout() {
     initDbOnce()
       .catch(() => setInitError("数据库初始化失败"))
       .finally(() => {
-        console.log("initDbOnce finally");
         setReady(true);
       });
   }, []);
@@ -37,8 +36,6 @@ export default function RootLayout() {
       </View>
     );
   }
-
-  console.log("aaa");
 
   return (
     <SecurityGate>

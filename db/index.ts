@@ -21,10 +21,8 @@ export async function initDbOnce() {
   if (!initPromise) {
     initPromise = (async () => {
       const database = await getDb();
-      console.log("Initializing database...", database);
       await migrate(database as SQLiteDatabase);
     })();
   }
-  console.log("initDbOnce", initPromise);
   return initPromise;
 }
