@@ -244,8 +244,12 @@ export default function ModalScreen() {
               }
               await load();
               router.back();
-            } catch {
-              setError("保存失败");
+            } catch (error) {
+              if (error instanceof Error && error.message === "Locked") {
+                setError("应用已锁定，请先解锁后再保存");
+              } else {
+                setError("保存失败");
+              }
             } finally {
               setLoading(false);
             }
