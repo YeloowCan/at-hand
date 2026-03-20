@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 
-const KEY_CATEGORIES = "at-hand:categories";
+const KEY_CATEGORIES = "at-hand-categories";
 
 export const DEFAULT_CATEGORIES = ["证件", "卡片", "合同"] as const;
 
@@ -39,4 +39,3 @@ export async function saveCategories(categories: string[]) {
   await SecureStore.setItemAsync(KEY_CATEGORIES, JSON.stringify(list));
   return list;
 }
-

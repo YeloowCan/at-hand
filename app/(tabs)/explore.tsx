@@ -1,6 +1,13 @@
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { FlatList, Keyboard, Pressable, Text, TextInput, View } from "react-native";
+import {
+  FlatList,
+  Keyboard,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useAppStore } from "../../store/useAppStore";
 import { useCategoryStore } from "../../store/useCategoryStore";
 import { useInfoStore } from "../../store/useInfoStore";
@@ -26,11 +33,15 @@ export default function ExploreScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([load(), bootstrapCategories()]).catch(() => undefined);
+    Promise.all([load(), bootstrapCategories()]).catch((error) => {
+      console.log("加载信息失败", error);
+    });
   }, [load, bootstrapCategories]);
 
   useEffect(() => {
-    const names = Array.from(new Set(items.map((it) => it.category).filter(Boolean)));
+    const names = Array.from(
+      new Set(items.map((it) => it.category).filter(Boolean)),
+    );
     syncCategoriesFromItems(names).catch(() => undefined);
   }, [items, syncCategoriesFromItems]);
 
@@ -77,7 +88,9 @@ export default function ExploreScreen() {
                   setBusy(true);
                   await addCategory(newCategory);
                   setNewCategory("");
-                } catch {
+                } catch (error) {
+                  console.log(error);
+
                   setError("添加失败");
                 } finally {
                   setBusy(false);
@@ -93,7 +106,9 @@ export default function ExploreScreen() {
           </View>
         </View>
 
-        {error ? <Text className="text-sm text-red-500 mb-4">{error}</Text> : null}
+        {error ? (
+          <Text className="text-sm text-red-500 mb-4">{error}</Text>
+        ) : null}
 
         <FlatList
           data={data}

@@ -15,7 +15,7 @@ import type { InfoDraft, InfoItem } from "../types/info";
 import { decryptJsonV1, encryptJsonV1, randomHex } from "../utils/crypto";
 import { DEFAULT_CATEGORIES } from "./categoryService";
 
-const LEGACY_KEY_SALT = "at-hand:salt";
+const LEGACY_KEY_SALT = "at-hand-salt";
 
 function requireKeyHex() {
   const keyHex = useSecurityStore.getState().keyHex;
