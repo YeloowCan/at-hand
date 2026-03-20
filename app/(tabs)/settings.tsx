@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Switch, Text, TextInput, View } from "react-native";
 import { useSecurityStore } from "../../store/useSecurityStore";
 
 export default function SettingsScreen() {
   const status = useSecurityStore((s) => s.status);
+  const pinLoginEnabled = useSecurityStore((s) => s.pinLoginEnabled);
+  const setPinLoginEnabled = useSecurityStore((s) => s.setPinLoginEnabled);
   const lock = useSecurityStore((s) => s.lock);
   const biometricAvailable = useSecurityStore((s) => s.biometricAvailable);
   const biometricEnabled = useSecurityStore((s) => s.biometricEnabled);
@@ -15,6 +17,7 @@ export default function SettingsScreen() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [updatingPinLogin, setUpdatingPinLogin] = useState(false);
   const canEnable = useMemo(() => pin.length >= 4, [pin]);
 
   return (
@@ -26,13 +29,43 @@ export default function SettingsScreen() {
 
       <View className="px-6">
         <View className="rounded-2xl border border-gray-100 px-4 py-4">
-          <Text className="text-base text-gray-900">解锁</Text>
-          <Text className="mt-1 text-sm text-gray-400">
-            设置 PIN 或启用生物识别
-          </Text>
+          <View className="flex-row items-center justify-between">
+            <View className="mr-4 flex-1">
+              <Text className="text-base text-gray-900">PIN 登录</Text>
+              <Text className="mt-1 text-sm text-gray-400">
+                默认关闭，关闭后进入应用不需要 PIN
+              </Text>
+            </View>
+            <Switch
+              value={pinLoginEnabled}
+              disabled={updatingPinLogin}
+              onValueChange={async (value) => {
+                try {
+                  setUpdatingPinLogin(true);
+                  setError(null);
+                  setShowEnableBio(false);
+                  setPin("");
+                  await setPinLoginEnabled(value);
+                } catch {
+                  setError("PIN 登录设置失败，请重试");
+                } finally {
+                  setUpdatingPinLogin(false);
+                }
+              }}
+            />
+          </View>
         </View>
 
-        {biometricAvailable ? (
+        {pinLoginEnabled ? (
+          <View className="mt-3 rounded-2xl border border-gray-100 px-4 py-4">
+            <Text className="text-base text-gray-900">解锁</Text>
+            <Text className="mt-1 text-sm text-gray-400">
+              设置 PIN 或启用生物识别
+            </Text>
+          </View>
+        ) : null}
+
+        {pinLoginEnabled && biometricAvailable ? (
           <View className="mt-3 rounded-2xl border border-gray-100 px-4 py-4">
             <Text className="text-base text-gray-900">生物识别解锁</Text>
             <Text className="mt-1 text-sm text-gray-400">
@@ -67,8 +100,8 @@ export default function SettingsScreen() {
                     <View className="rounded-2xl bg-gray-100 px-4 py-3">
                       <TextInput
                         value={pin}
-                        onChangeText={(t) => {
-                          setPin(t.replace(/\D/g, ""));
+                        onChangeText={(text) => {
+                          setPin(text.replace(/\D/g, ""));
                           setError(null);
                         }}
                         keyboardType="number-pad"
@@ -106,7 +139,7 @@ export default function SettingsScreen() {
           </View>
         ) : null}
 
-        {status === "unlocked" ? (
+        {pinLoginEnabled && status === "unlocked" ? (
           <Pressable
             onPress={lock}
             className="mt-3 rounded-2xl border border-gray-100 px-4 py-4"
@@ -139,7 +172,7 @@ export default function SettingsScreen() {
             ].join(" ")}
           >
             <Text className="text-center text-white">
-              {clearing ? "清空中…" : "确认清空"}
+              {clearing ? "清空中..." : "确认清空"}
             </Text>
           </Pressable>
         </View>

@@ -13,6 +13,7 @@ import {
 type SecurityStatus = "booting" | "setup_required" | "locked" | "unlocked";
 
 export const SECURITY_SECURE_STORE_KEYS = {
+  PIN_LOGIN_ENABLED: "at-hand-pin-login-enabled",
   SALT: "at-hand-salt",
   VERIFIER: "at-hand-verifier",
   KDF_PARAMS: "at-hand-kdf-params",
@@ -22,6 +23,7 @@ export const SECURITY_SECURE_STORE_KEYS = {
 
 type State = {
   status: SecurityStatus;
+  pinLoginEnabled: boolean;
   biometricAvailable: boolean;
   biometricEnabled: boolean;
   saltHex: string | null;
@@ -29,6 +31,7 @@ type State = {
   kdfParams: KdfParams;
   keyHex: string | null;
   bootstrap: () => Promise<void>;
+  setPinLoginEnabled: (enabled: boolean) => Promise<void>;
   setupPin: (pin: string, enableBiometric: boolean) => Promise<void>;
   unlockWithPin: (pin: string) => Promise<void>;
   unlockWithBiometric: () => Promise<void>;
@@ -45,12 +48,14 @@ async function detectBiometricAvailable() {
 }
 
 async function getMeta() {
-  const [salt, verifier, kdfParamsRaw, bioEnabled] = await Promise.all([
-    SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.SALT),
-    SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.VERIFIER),
-    SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.KDF_PARAMS),
-    SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.BIO_ENABLED),
-  ]);
+  const [pinLoginEnabled, salt, verifier, kdfParamsRaw, bioEnabled] =
+    await Promise.all([
+      SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.PIN_LOGIN_ENABLED),
+      SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.SALT),
+      SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.VERIFIER),
+      SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.KDF_PARAMS),
+      SecureStore.getItemAsync(SECURITY_SECURE_STORE_KEYS.BIO_ENABLED),
+    ]);
 
   let kdfParams = CURRENT_KDF_PARAMS;
   if (kdfParamsRaw) {
@@ -74,6 +79,7 @@ async function getMeta() {
   }
 
   return {
+    pinLoginEnabled: pinLoginEnabled === "1",
     salt,
     verifier,
     kdfParams,
@@ -82,17 +88,23 @@ async function getMeta() {
 }
 
 async function persistSecurityMeta({
+  pinLoginEnabled,
   saltHex,
   verifier,
   kdfParams,
   biometricEnabled,
 }: {
+  pinLoginEnabled: boolean;
   saltHex: string;
   verifier: string;
   kdfParams: KdfParams;
   biometricEnabled: boolean;
 }) {
   await Promise.all([
+    SecureStore.setItemAsync(
+      SECURITY_SECURE_STORE_KEYS.PIN_LOGIN_ENABLED,
+      pinLoginEnabled ? "1" : "0",
+    ),
     SecureStore.setItemAsync(SECURITY_SECURE_STORE_KEYS.SALT, saltHex),
     SecureStore.setItemAsync(SECURITY_SECURE_STORE_KEYS.VERIFIER, verifier),
     SecureStore.setItemAsync(
@@ -108,6 +120,7 @@ async function persistSecurityMeta({
 
 export const useSecurityStore = create<State>((set, get) => ({
   status: "booting",
+  pinLoginEnabled: false,
   biometricAvailable: false,
   biometricEnabled: false,
   saltHex: null,
@@ -121,9 +134,24 @@ export const useSecurityStore = create<State>((set, get) => ({
       getMeta(),
     ]);
 
+    if (!meta.pinLoginEnabled) {
+      set({
+        status: "unlocked",
+        pinLoginEnabled: false,
+        biometricAvailable,
+        biometricEnabled: false,
+        saltHex: meta.salt ?? null,
+        verifier: meta.verifier ?? null,
+        kdfParams: meta.kdfParams,
+        keyHex: null,
+      });
+      return;
+    }
+
     if (!meta.salt || !meta.verifier) {
       set({
         status: "setup_required",
+        pinLoginEnabled: true,
         biometricAvailable,
         biometricEnabled: false,
         saltHex: null,
@@ -136,10 +164,43 @@ export const useSecurityStore = create<State>((set, get) => ({
 
     set({
       status: "locked",
+      pinLoginEnabled: true,
       biometricAvailable,
       biometricEnabled: meta.bioEnabled && biometricAvailable,
       saltHex: meta.salt,
       verifier: meta.verifier,
+      kdfParams: meta.kdfParams,
+      keyHex: null,
+    });
+  },
+
+  setPinLoginEnabled: async (enabled) => {
+    await SecureStore.setItemAsync(
+      SECURITY_SECURE_STORE_KEYS.PIN_LOGIN_ENABLED,
+      enabled ? "1" : "0",
+    );
+
+    if (!enabled) {
+      set({
+        pinLoginEnabled: false,
+        status: "unlocked",
+        biometricEnabled: false,
+        keyHex: null,
+      });
+      return;
+    }
+
+    const meta = await getMeta();
+    const saltHex = meta.salt ?? get().saltHex;
+    const verifier = meta.verifier ?? get().verifier;
+    const biometricEnabled = meta.bioEnabled && get().biometricAvailable;
+
+    set({
+      pinLoginEnabled: true,
+      status: saltHex && verifier ? "locked" : "setup_required",
+      biometricEnabled: Boolean(saltHex && verifier) && biometricEnabled,
+      saltHex: saltHex ?? null,
+      verifier: verifier ?? null,
       kdfParams: meta.kdfParams,
       keyHex: null,
     });
@@ -154,6 +215,7 @@ export const useSecurityStore = create<State>((set, get) => ({
     const willEnableBio = Boolean(enableBiometric && biometricAvailable);
 
     await persistSecurityMeta({
+      pinLoginEnabled: true,
       saltHex,
       verifier,
       kdfParams,
@@ -169,6 +231,7 @@ export const useSecurityStore = create<State>((set, get) => ({
 
     set({
       status: "unlocked",
+      pinLoginEnabled: true,
       biometricEnabled: willEnableBio,
       saltHex,
       verifier,
@@ -191,6 +254,7 @@ export const useSecurityStore = create<State>((set, get) => ({
       biometricEnabled = meta.bioEnabled && get().biometricAvailable;
       set({
         biometricEnabled,
+        pinLoginEnabled: meta.pinLoginEnabled,
         saltHex: meta.salt ?? null,
         verifier: meta.verifier ?? null,
         kdfParams,
@@ -200,6 +264,7 @@ export const useSecurityStore = create<State>((set, get) => ({
     if (!saltHex || !verifierHex) {
       set({
         status: "setup_required",
+        pinLoginEnabled: true,
         biometricEnabled: false,
         saltHex: null,
         verifier: null,
@@ -216,6 +281,7 @@ export const useSecurityStore = create<State>((set, get) => ({
 
     set({
       status: "unlocked",
+      pinLoginEnabled: true,
       biometricEnabled,
       saltHex,
       verifier: verifierHex,
@@ -245,6 +311,10 @@ export const useSecurityStore = create<State>((set, get) => ({
   },
 
   lock: () => {
+    if (!get().pinLoginEnabled) {
+      set({ status: "unlocked", keyHex: null });
+      return;
+    }
     set({ status: "locked", keyHex: null });
   },
 
@@ -284,6 +354,10 @@ export const useSecurityStore = create<State>((set, get) => ({
 
   clearAllData: async () => {
     await Promise.all([
+      SecureStore.setItemAsync(
+        SECURITY_SECURE_STORE_KEYS.PIN_LOGIN_ENABLED,
+        "0",
+      ),
       SecureStore.deleteItemAsync(SECURITY_SECURE_STORE_KEYS.SALT),
       SecureStore.deleteItemAsync(SECURITY_SECURE_STORE_KEYS.VERIFIER),
       SecureStore.deleteItemAsync(SECURITY_SECURE_STORE_KEYS.KDF_PARAMS),
@@ -296,7 +370,8 @@ export const useSecurityStore = create<State>((set, get) => ({
     await db?.execAsync(`DELETE FROM info;`);
 
     set({
-      status: "setup_required",
+      status: "unlocked",
+      pinLoginEnabled: false,
       biometricEnabled: false,
       saltHex: null,
       verifier: null,
