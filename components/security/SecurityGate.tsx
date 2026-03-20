@@ -112,7 +112,9 @@ function SetupPinScreen() {
           </Pressable>
         ) : null}
 
-        {error ? <Text className="mt-4 text-sm text-red-500">{error}</Text> : null}
+        {error ? (
+          <Text className="mt-4 text-sm text-red-500">{error}</Text>
+        ) : null}
       </View>
 
       <View className="mt-auto pb-8">
@@ -147,7 +149,11 @@ function UnlockScreen() {
   const [unlocking, setUnlocking] = useState(false);
 
   return (
-    <View className="flex-1 bg-white px-6 pt-12">
+    <Pressable
+      className="flex-1 bg-white px-6 pt-12"
+      onPress={() => Keyboard.dismiss()}
+      accessible={false}
+    >
       <Text className="text-3xl font-light tracking-tight">解锁随取</Text>
       <Text className="mt-2 text-sm text-gray-400">输入 PIN 进入应用</Text>
 
@@ -168,7 +174,9 @@ function UnlockScreen() {
           />
         </View>
 
-        {error ? <Text className="mt-4 text-sm text-red-500">{error}</Text> : null}
+        {error ? (
+          <Text className="mt-4 text-sm text-red-500">{error}</Text>
+        ) : null}
       </View>
 
       <View className="mt-auto pb-8">
@@ -206,7 +214,7 @@ function UnlockScreen() {
           />
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
